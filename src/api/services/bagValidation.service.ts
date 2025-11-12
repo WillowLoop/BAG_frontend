@@ -1,25 +1,25 @@
 /**
  * BAG Validation Service
  *
- * API service methods for starting validation and polling validation status.
- * Handles the two-step validation workflow: start validation + status polling.
+ * API service methods for starting validation.
+ * Handles the validation workflow: start validation -> WebSocket progress updates.
  *
  * Adapted from ExcelFlow analysis service with BAG-specific additions:
  * - Separate start validation endpoint (POST)
- * - Status polling endpoint (GET)
  * - Transforms snake_case responses to camelCase
  * - Returns sessionId instead of jobId
+ *
+ * Note: Status polling is NOT implemented. Use WebSocket for real-time progress.
  */
 
 import { bagClient } from '../bagClient';
 import type {
   BagValidateResponse,
   BagValidateResponseRaw,
-  BagValidationStatus,
-  BagValidationStatusRaw,
   ValidationConfig,
 } from '../types/bag.types';
-import { transformValidateResponse, transformValidationStatus } from '../types/bag.types';
+import { transformValidateResponse } from '../types/bag.types';
+import { DEFAULT_VALIDATION_CONFIG } from '@/lib/bagConstants';
 
 /**
  * Start validation for an uploaded session
@@ -43,9 +43,12 @@ export async function startValidation(
   config?: ValidationConfig
 ): Promise<BagValidateResponse> {
   try {
+    // Use provided config or default config
+    const validationConfig = config || DEFAULT_VALIDATION_CONFIG;
+
     const response = await bagClient.post<BagValidateResponseRaw>(
       `/api/v1/validate/${sessionId}`,
-      { config }
+      { config: validationConfig }
     );
 
     // Transform snake_case response to camelCase
@@ -57,51 +60,10 @@ export async function startValidation(
 }
 
 /**
- * Get the current validation status for a session
- *
- * Polls the status endpoint to get progress updates during validation.
- * This endpoint should be called every 2.5 seconds until status is 'complete' or 'failed'.
- *
- * @param sessionId - Unique session identifier
- * @returns Promise resolving to validation status with progress information
- * @throws AppError if session not found or other errors occur
- *
- * @example
- * ```typescript
- * const status = await getValidationStatus(sessionId);
- * console.log(`Progress: ${status.progress}%`);
- * console.log(`Phase: ${status.phase}`);
- * console.log(`Processed: ${status.processedCount} / ${status.totalCount}`);
- *
- * if (status.status === 'complete') {
- *   console.log('Validation complete!');
- * } else if (status.status === 'failed') {
- *   console.error('Validation failed:', status.error);
- * }
- * ```
- */
-export async function getValidationStatus(
-  sessionId: string
-): Promise<BagValidationStatus> {
-  try {
-    const response = await bagClient.get<BagValidationStatusRaw>(
-      `/api/v1/status/${sessionId}`
-    );
-
-    // Transform snake_case response to camelCase
-    return transformValidationStatus(response.data);
-  } catch (error) {
-    // Error is already transformed by bagClient interceptor
-    throw error;
-  }
-}
-
-/**
  * Validation service exports
  */
 export const bagValidationService = {
   startValidation,
-  getValidationStatus,
 };
 
 export default bagValidationService;

@@ -14,7 +14,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useBagValidation } from '@/contexts/BagValidationContext';
 import type { BagValidationStatus, AppError } from '@/api/types/bag.types';
-import { VALIDATION_STATUSES, APP_STATES } from '@/lib/bagConstants';
+import { VALIDATION_STATUSES, APP_STATES, API_CONFIG } from '@/lib/bagConstants';
+
+/**
+ * Convert HTTP/HTTPS URL to WebSocket URL
+ * @param httpUrl - HTTP or HTTPS URL
+ * @returns WebSocket URL (ws:// or wss://)
+ */
+function httpToWebSocketUrl(httpUrl: string): string {
+  return httpUrl.replace(/^http/, 'ws');
+}
 
 // WebSocket message types from backend
 interface ProgressMessage {
@@ -87,6 +96,8 @@ export function useBagValidationStatus(
 ): UseBagValidationStatusResult {
   const { state, setComplete, setError } = useBagValidation();
   const wsRef = useRef<WebSocket | null>(null);
+  const lastTotalCountRef = useRef<number>(0);
+  const isCompletedRef = useRef<boolean>(false);
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<BagValidationStatus | undefined>(undefined);
   const [error, setErrorState] = useState<AppError | null>(null);
@@ -97,8 +108,18 @@ export function useBagValidationStatus(
       return;
     }
 
-    // WebSocket endpoint
-    const wsUrl = `ws://localhost:8000/api/v1/ws/progress/${sessionId}`;
+    // If already have an active WebSocket, don't create a new one
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log('WebSocket already connected, skipping reconnect');
+      return;
+    }
+
+    // Reset completion flag for new validation
+    isCompletedRef.current = false;
+
+    // WebSocket endpoint - convert HTTP base URL to WebSocket
+    const wsBaseUrl = httpToWebSocketUrl(API_CONFIG.BASE_URL);
+    const wsUrl = `${wsBaseUrl}/api/v1/ws/progress/${sessionId}`;
 
     // Create WebSocket connection
     const ws = new WebSocket(wsUrl);
@@ -115,6 +136,7 @@ export function useBagValidationStatus(
 
         if (message.type === 'progress') {
           // Update progress state
+          lastTotalCountRef.current = message.total_count;
           setData({
             sessionId: sessionId,
             status: 'processing',
@@ -125,13 +147,14 @@ export function useBagValidationStatus(
           });
         } else if (message.type === 'complete') {
           // Validation completed successfully
+          isCompletedRef.current = true;
           setData({
             sessionId: sessionId,
             status: 'complete',
             progress: 100,
             phase: 'Voltooid',
-            processedCount: data?.totalCount ?? 0,
-            totalCount: data?.totalCount ?? 0,
+            processedCount: lastTotalCountRef.current,
+            totalCount: lastTotalCountRef.current,
           });
           setComplete();
           ws.close();
@@ -166,13 +189,21 @@ export function useBagValidationStatus(
       setIsLoading(false);
     };
 
-    // Cleanup: close WebSocket on unmount
+    // Cleanup: only close WebSocket if validation is complete or on component unmount
     return () => {
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
+      // In StrictMode, React will call cleanup even during double-mount
+      // Only close if validation is actually complete or component is truly unmounting
+      if (isCompletedRef.current || state !== APP_STATES.VALIDATING) {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          console.log('Closing WebSocket in cleanup (completed or state changed)');
+          ws.close();
+        }
+      } else {
+        // Don't close - this is likely a StrictMode double-mount
+        console.log('Skipping WebSocket close in cleanup (validation still active)');
       }
     };
-  }, [sessionId, state, setComplete, setError, data?.totalCount]);
+  }, [sessionId, state]);
 
   return {
     status: data,

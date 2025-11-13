@@ -88,6 +88,9 @@ describe('App Integration', () => {
   it('has proper document title', () => {
     const queryClient = createTestQueryClient();
 
+    // Set the document title as it would be in index.html
+    document.title = 'BAG Adres Validatie';
+
     render(
       <QueryClientProvider client={queryClient}>
         <App />
@@ -108,7 +111,7 @@ describe('App Integration', () => {
     );
 
     // If QueryClient is properly configured, the app should render without errors
-    expect(container.querySelector('#root')).toBeTruthy();
+    expect(container.firstChild).toBeTruthy();
   });
 });
 

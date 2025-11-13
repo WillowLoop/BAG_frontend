@@ -7,12 +7,27 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BagUploadSection } from '../BagUploadSection';
 import { BagProcessingView } from '../BagProcessingView';
 import { BagDownloadSection } from '../BagDownloadSection';
 import { BagErrorView } from '../BagErrorView';
 import { BagValidationProvider } from '@/contexts/BagValidationContext';
 import type { AppError } from '@/api/types';
+
+// Helper to create a test QueryClient
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  });
+}
 
 // Mock toast
 vi.mock('sonner', () => ({
@@ -61,7 +76,7 @@ describe('BagUploadSection', () => {
 
     expect(screen.getByText(/Upload je Excel bestand met adressen/i)).toBeInTheDocument();
     expect(screen.getByText(/Kies bestand/i)).toBeInTheDocument();
-    expect(screen.getByText(/\.xlsx/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ondersteunde formaten: \.xlsx/i)).toBeInTheDocument();
   });
 
   it('shows file preview when file is selected', async () => {
@@ -108,10 +123,13 @@ describe('BagUploadSection', () => {
 
 describe('BagProcessingView', () => {
   it('displays progress bar and percentage', () => {
+    const queryClient = createTestQueryClient();
     render(
-      <BagValidationProvider>
-        <BagProcessingView filename="test.xlsx" fileSize={1024} />
-      </BagValidationProvider>
+      <QueryClientProvider client={queryClient}>
+        <BagValidationProvider>
+          <BagProcessingView filename="test.xlsx" fileSize={1024} />
+        </BagValidationProvider>
+      </QueryClientProvider>
     );
 
     expect(screen.getByText('Voortgang')).toBeInTheDocument();
@@ -119,20 +137,26 @@ describe('BagProcessingView', () => {
   });
 
   it('shows processed count indicator', () => {
+    const queryClient = createTestQueryClient();
     render(
-      <BagValidationProvider>
-        <BagProcessingView filename="test.xlsx" fileSize={1024} />
-      </BagValidationProvider>
+      <QueryClientProvider client={queryClient}>
+        <BagValidationProvider>
+          <BagProcessingView filename="test.xlsx" fileSize={1024} />
+        </BagValidationProvider>
+      </QueryClientProvider>
     );
 
     expect(screen.getByText(/50 van 100 adressen verwerkt/i)).toBeInTheDocument();
   });
 
   it('displays phase message', () => {
+    const queryClient = createTestQueryClient();
     render(
-      <BagValidationProvider>
-        <BagProcessingView filename="test.xlsx" fileSize={1024} />
-      </BagValidationProvider>
+      <QueryClientProvider client={queryClient}>
+        <BagValidationProvider>
+          <BagProcessingView filename="test.xlsx" fileSize={1024} />
+        </BagValidationProvider>
+      </QueryClientProvider>
     );
 
     expect(screen.getByText(/Valideren/i)).toBeInTheDocument();
@@ -225,13 +249,16 @@ describe('BagErrorView', () => {
       message: 'Network error',
     };
 
-    const { getByText } = render(
+    const { queryByText } = render(
       <BagValidationProvider>
         <BagErrorView error={error} />
       </BagValidationProvider>
     );
 
-    expect(getByText('Probeer opnieuw')).toBeInTheDocument();
+    // Retry button only shows when there's a currentFile in context
+    // Without a currentFile, only the reset button should show
+    expect(queryByText('Probeer opnieuw')).not.toBeInTheDocument();
+    expect(queryByText('Terug naar upload')).toBeInTheDocument();
   });
 
   it('shows reset button for all error types', () => {

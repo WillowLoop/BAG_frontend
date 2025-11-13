@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+build/
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files (will be built into image)
+.env.local
+.env.development
+.env.test
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/
+.git/
+
+# Misc
+*.log
+npm-debug.log*
